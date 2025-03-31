@@ -18,12 +18,12 @@ class MessageSent implements ShouldBroadcast
 
     public function broadcastOn()
     {
-        return new Channel('chat'); // ✅ Channel matches React subscription
+        return new Channel('chat');
     }
 
     public function broadcastAs()
     {
-        return 'message.sent'; // ✅ Event name matches React
+        return 'message.sent';
     }
 }
 
