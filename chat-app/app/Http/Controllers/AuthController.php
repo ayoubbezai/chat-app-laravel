@@ -54,4 +54,20 @@ class AuthController extends Controller
         $request->user()->tokens()->delete();
         return response()->json(['message' => 'Logged out successfully']);
     }
+public function getAllUsers()
+{
+    try {
+        $users = User::all(); // Fetch all users from the database
+        return response()->json([
+            'success' => true,
+            'users' => $users
+        ], 200);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error fetching users',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
 }

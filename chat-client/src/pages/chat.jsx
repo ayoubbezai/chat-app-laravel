@@ -1,75 +1,131 @@
 import React, { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import Pusher from "pusher-js";
 import axios from "axios";
 
-const App = () => {
-  const [messages, setMessages] = useState([]);
-  const [message, setMessage] = useState("");
+const Chat = () => {
+    const { receiverId } = useParams(); // Get receiverId from the URL
+    const [user, setUser] = useState(null);
+    const [messages, setMessages] = useState([]);
+    const [message, setMessage] = useState("");
 
-  console.log("VITE_REVERB_APP_KEY:", import.meta.env.VITE_REVERB_APP_KEY);
+    useEffect(() => {
+        const fetchUserAndMessages = async () => {
+            try {
+                const userRes = await axios.get("http://127.0.0.1:8000/api/user", {
+                    headers: {
+                        Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    },
+                });
+                setUser(userRes.data);
 
-  useEffect(() => {
-    if (!import.meta.env.VITE_REVERB_APP_KEY) {
-      console.error("❌ Missing VITE_REVERB_APP_KEY!");
-      return;
-    }
+                if (receiverId) {
+                    const messagesRes = await axios.get(`http://127.0.0.1:8000/api/messages/${receiverId}`, {
+                        headers: {
+                            Authorization: `Bearer ${localStorage.getItem("token")}`,
+                        },
+                    });
+                    console.log(messagesRes.data.messages)
+                    setMessages(messagesRes.data?.messages);
+                }
+            } catch (error) {
+                console.error("❌ Error fetching data:", error);
+            }
+        };
 
-    const pusher = new Pusher(import.meta.env.VITE_REVERB_APP_KEY, {
-      wsHost: import.meta.env.VITE_REVERB_HOST,
-      wsPort: import.meta.env.VITE_REVERB_PORT,
-      forceTLS: false,
-      disableStats: true,
-      enabledTransports: ["ws", "wss"],
-      cluster: ""
-    });
+        fetchUserAndMessages();
+    }, [receiverId]);
 
-    const channel = pusher.subscribe("chat");
+    useEffect(() => {
+        if (!user || !receiverId) return;
 
-    // 🔍 Debug: Log all events
-    channel.bind_global((event, data) => {
-      console.log(`🔴 WebSocket Event Received: ${event}`, data);
-    });
+        const pusher = new Pusher(import.meta.env.VITE_REVERB_APP_KEY, {
+            wsHost: import.meta.env.VITE_REVERB_HOST,
+            wsPort: import.meta.env.VITE_REVERB_PORT,
+            forceTLS: false,
+            disableStats: true,
+            enabledTransports: ["ws", "wss"],
+            cluster: "",
+            authEndpoint: 'http://localhost:8000/api/broadcasting/auth',
+            auth: {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem("token")}`
+                }
+            }
+        });
 
-    // 🔥 Listen for messages
-    channel.bind("message.sent", (data) => {
-      console.log("✅ New Message from WebSocket:", data);
-      if (data && data.message) {
-        setMessages((prev) => [...prev, data.message]);
-      }
-    });
+        // const channel = pusher.subscribe(`chat.${receiverId}`);
+        const channel = pusher.subscribe('private-chat.1'); // Hardcode for testing
+        channel.bind('pusher:subscription_succeeded', () => {
+            console.log("✅ Subscribed to channel!");
+        });
+        channel.bind('message.sent', (data) => {
+            console.log("📩 Received message:", data);
+        });
 
-    return () => {
-      channel.unbind_all();
-      channel.unsubscribe();
+
+        channel.bind("message.sent", (data) => {
+            console.log("✅ New Message Received:", data);
+            if (data.sender_id === Number(receiverId) || data.receiver_id === Number(receiverId)) {
+                setMessages((prev) => [...prev, data]);
+            }
+        });
+
+        return () => {
+            channel.unbind_all();
+            channel.unsubscribe();
+        };
+    }, [user, receiverId]);
+
+    const sendMessage = async () => {
+        if (!receiverId || !message.trim()) {
+            alert("Please select a user and type a message.");
+            return;
+        }
+
+        try {
+            const response = await axios.post(
+                "http://127.0.0.1:8000/api/send-message",
+                { message, receiver_id: receiverId },
+                {
+                    headers: {
+                        Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    },
+                }
+            );
+            console.log("✅ Sent message:", response.data);
+            setMessage("");
+        } catch (error) {
+            console.error("❌ Error sending message:", error);
+        }
     };
-  }, []);
 
-  const sendMessage = async () => {
-    try {
-      const response = await axios.post("http://127.0.0.1:8000/api/send-message", {
-        message,
-      });
-      console.log("✅ Sent message:", response.data); // ✅ Debug log
-      setMessage("");
-    } catch (error) {
-      console.error("❌ Error sending message:", error);
-    }
-  };
+    return (
+        <div className="chat-container">
+            <h2>Chat with User {receiverId}</h2>
 
-  return (
-    <div>
-      <h2>Chat App</h2>
-      <div>
-        {messages.map((msg, i) => (
-          <p key={msg.id || i}>
-            <strong>{msg.sender}:</strong> {msg.content}
-          </p>
-        ))}
-      </div>
-      <input value={message} onChange={(e) => setMessage(e.target.value)} />
-      <button onClick={sendMessage}>Send</button>
-    </div>
-  );
+            <div className="messages">
+                {messages.length > 0 ? (
+                    messages.map((msg, i) => (
+                        <p key={msg.id || i} className={msg.sender_id === user?.id ? "sent" : "received"}>
+                            <strong>{msg.sender?.name || "Unknown"}:</strong> {msg.message}
+                        </p>
+                    ))
+                ) : (
+                    <p>No messages yet.</p>
+                )}
+            </div>
+
+            <div className="message-input">
+                <input
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="Type a message..."
+                />
+                <button onClick={sendMessage}>Send</button>
+            </div>
+        </div>
+    );
 };
 
-export default App;
+export default Chat;
