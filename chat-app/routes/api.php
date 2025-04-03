@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Events\MessageSent;
+use App\Events\UserTyping;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Message;
 
@@ -32,4 +33,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/messages/{userId}', [ChatController::class, 'getMessages']);
 });
 
+Route::post('/broadcast-typing', function (Request $request) {
+    $validated = $request->validate([
+        'user_id' => 'required|integer',
+        'receiver_id' => 'required|integer',
+        'is_typing' => 'required|boolean'
+    ]);
 
+    broadcast(new UserTyping(
+        $validated['user_id'],
+        $validated['receiver_id'],
+        $validated['is_typing']
+    ));
+
+    return response()->json(['success' => true]);
+})->middleware('auth:sanctum');

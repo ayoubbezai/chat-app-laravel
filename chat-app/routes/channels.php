@@ -10,3 +10,6 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 Broadcast::channel('chat.{receiverId}', function ($user, $receiverId) {
     return true;
 });
+Broadcast::channel('typing.{receiverId}', function ($user, $receiverId) {
+    return true;
+});
